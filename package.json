@@ -1,0 +1,14 @@
+{
+  "name": "rxjs-debugger",
+  "version": "0.1.0",
+  "description": "Stack traces fro RxJS observables :OO",
+  "main": "index.js",
+  "author": "Luca Nils Schmid <me@lucaschmid.net>",
+  "license": "MIT",
+  "devDependencies": {
+    "rxjs": "^5.0.0-rc.4"
+  },
+  "dependencies": {
+    "ramda": "^0.22.1"
+  }
+}
