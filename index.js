@@ -1,4 +1,5 @@
 const R = require('ramda')
+const util = require('util')
 
 const getConstructorName = R.path(['constructor', 'name'])
 const getSource = R.path(['source'])
@@ -18,19 +19,25 @@ module.exports = function MountDebugOperator (Observable) {
   }
 }
 
-function debugOperator (observable) {
+function debugOperator ($observable) {
   return {
     call: (subscriber) =>
-      observable.subscribe(
+      $observable.subscribe(
         subscriber.next.bind(subscriber),
-        () => printTrace(observable),
+        (err) => {
+          /* print a trace to the error */
+          printTrace($observable)
+          /* continue on on the normal error path */
+          subscriber.error(err)
+        },
         subscriber.complete.bind(subscriber)
-      )
+      ),
+    project: (v) => v,
   }
 }
 
 const print = (...args) => { console.log(`    ${args.join(' ')}`) }
-const printOperatorNameAndFunction = R.converge(print, [getOperatorName, getProjectAsString])
+const printOperatorNameAndFunction = R.converge(print, [getOperatorName, getProjectAsString, R.path(['isStopped'])])
 
 const printTrace = R.cond([
   [getProject, doAnd(printOperatorNameAndFunction, $o => printNextTrace($o))],
@@ -41,3 +48,25 @@ const printTrace = R.cond([
 const printNextTrace = R.cond([
   [getInnerSource, R.pipe(getInnerSource, printTrace)]
 ])
+
+/* TODO: this only works in v8 */
+const getStack = (err = new Error()) => {
+  /* Store old trace formatter to reasign later */
+  const prepareStackTrace = Error.prepareStackTrace
+  /* Get the stack object and the source object */
+  Error.prepareStackTrace = R.nthArg(1)
+  const stack = err.stack
+  /* Reset formatter to initial state */
+  Error.prepareStackTrace = prepareStackTrace
+  return stack
+}
+
+const getCurrentLocation = R.pipe(
+  getStack,
+  R.head,
+  /* get filename, line number and column number from stack */
+  R.converge(
+    (f, l, c) => `${f} ${l}:${c}`,
+    R.map(R.invoker(0), ['getFileName', 'getLineNumber', 'getColumnNumber'])
+  )
+)
