@@ -6,6 +6,7 @@ const getSource = R.path(['source'])
 const getOperator = R.path(['operator'])
 const getProject = R.pipe(getOperator, R.path(['project']))
 const getProjectAsString = R.pipe(getProject, R.invoker(0, 'toString'))
+const getOperatorProp = (k) => R.pipe(getOperator, R.path([k]))
 const getOperatorName = R.pipe(getOperator, getConstructorName)
 const getInnerSource = R.path(['source'])
 const doAnd = (fa, fb) => x => {
@@ -21,7 +22,7 @@ module.exports = function MountDebugOperator (Observable) {
 
 function debugOperator ($observable) {
   return {
-    call: (subscriber) =>
+    call: (subscriber, source) =>
       $observable.subscribe(
         subscriber.next.bind(subscriber),
         (err) => {
@@ -32,17 +33,29 @@ function debugOperator ($observable) {
         },
         subscriber.complete.bind(subscriber)
       ),
-    project: (v) => v,
   }
 }
 
+const doIfEq = comperator => fallback => R.pipe(
+  R.map(([operator, fn]) => [comperator(operator), fn]),
+  (conditions) => R.cond(R.append([R.T, fallback], conditions))
+)
+
+const isOperator = (name) => ($o) => getOperatorName($o) === name
+const formatOperator = doIfEq(isOperator)(getOperatorName)([
+  ['MergeMapOperator', $o => `.mergeMap(${getProjectAsString($o)})`],
+  ['MapOperator', $o => `.map(${getProjectAsString($o)})`],
+  ['RetryOperator', $o => `.retry(${getOperatorProp('count')($o)})`],
+  ['DelayOperator', $o => `.delay(${getOperatorProp('delay')($o)})`]
+])
+
 const print = (...args) => { console.log(`    ${args.join(' ')}`) }
-const printOperatorNameAndFunction = R.converge(print, [getOperatorName, getProjectAsString, R.path(['isStopped'])])
+const printOperator = R.pipe(formatOperator, print)
 
 const printTrace = R.cond([
-  [getProject, doAnd(printOperatorNameAndFunction, $o => printNextTrace($o))],
-  [getOperatorName, doAnd(R.pipe(getOperatorName, print), $o => printNextTrace($o))],
-  [getSource, doAnd(R.pipe(getOperatorName, print), $o => printNextTrace($o))],
+  [getOperator, doAnd(printOperator, $o => printNextTrace($o))],
+//  [getOperatorName, doAnd(R.pipe(getOperatorName, print), $o => printNextTrace($o))],
+//  [getSource, doAnd(R.pipe(getOperatorName, print), $o => printNextTrace($o))],
 ])
 
 const printNextTrace = R.cond([
